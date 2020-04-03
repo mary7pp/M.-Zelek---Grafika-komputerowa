@@ -104,7 +104,7 @@ function startGL()
   gl.bindBuffer(gl.ARRAY_BUFFER, vertexPositionBuffer);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertexPosition), gl.STATIC_DRAW);
   vertexPositionBuffer.itemSize = 3; //zdefiniowanie liczby współrzednych per wierzchołek
-  vertexPositionBuffer.numItems = 28; //Zdefinoiowanie liczby punktów w naszym buforze
+  vertexPositionBuffer.numItems = 32; //Zdefinoiowanie liczby punktów w naszym buforze
   
   //Macierze opisujące położenie wirtualnej kamery w przestrzenie 3D
   let aspect = gl.viewportWidth/gl.viewportHeight;
