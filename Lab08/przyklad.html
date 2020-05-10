@@ -1,0 +1,1553 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<script type="text/javascript">
+var gl;
+var shaderProgram;
+var uPMatrix;
+var vertexPositionBuffer;
+var vertexColorBuffer;
+var vertexCoordsBuffer;
+var vertexNormalBuffer;
+
+function MatrixMul(a,b) //Mnożenie macierzy
+{
+  let c = [
+  0,0,0,0,
+  0,0,0,0,
+  0,0,0,0,
+  0,0,0,0
+  ]
+  for(let i=0;i<4;i++)
+  {
+    for(let j=0;j<4;j++)
+    {
+      c[i*4+j] = 0.0;
+      for(let k=0;k<4;k++)
+      {
+        c[i*4+j]+= a[i*4+k] * b[k*4+j];
+      }
+    }
+  }
+  return c;
+}
+
+function createRect2(p1x,p1y,p1z,p2x,p2y,p2z,p3x,p3y,p3z,p4x,p4y,p4z)
+{
+  let vertexPosition = [p1x,p1y,p1z, p2x,p2y,p2z, p4x,p4y,p4z,  //Pierwszy trójkąt
+                        p1x,p1y,p1z, p4x,p4y,p4z, p3x,p3y,p3z]; //Drugi trójkąt
+                        
+  return vertexPosition;
+}
+
+function createRectCoords(mu,mv,dau,dav,dbu,dbv)
+{
+  let p1u = mu;             p1v = mv;            
+  let p2u = mu + dau;       p2v = mv + dav;      
+  let p3u = mu + dbu;       p3v = mv + dbv;      
+  let p4u = mu + dau + dbu; p4v = mv + dav + dbv;
+  
+  let vertexCoord = [p1u,p1v, p2u,p2v, p4u,p4v,  //Pierwszy trójkąt
+                     p1u,p1v, p4u,p4v, p3u,p3v]; //Drugi trójkąt
+                        
+  return vertexCoord;
+}
+
+function createRectCoords2(p1u,p1v,p2u,p2v,p3u,p3v,p4u,p4v)
+{
+  let vertexCoord = [p1u,p1v, p2u,p2v, p4u,p4v,  //Pierwszy trójkąt
+                     p1u,p1v, p4u,p4v, p3u,p3v]; //Drugi trójkąt
+                        
+  return vertexCoord;
+}
+
+function createRectColor(r,g,b)
+{
+  let vertexColor = [r,g,b, r,g,b, r,g,b,  //Pierwszy trójkąt
+                     r,g,b, r,g,b, r,g,b]; //Drugi trójkąt
+                        
+  return vertexColor;
+}
+
+function createNormal(p1x,p1y,p1z,p2x,p2y,p2z,p3x,p3y,p3z) //Wyznaczenie wektora normalnego dla trójkąta
+{
+  let v1x = p2x - p1x;
+  let v1y = p2y - p1y;
+  let v1z = p2z - p1z;
+  
+  let v2x = p3x - p1x;
+  let v2y = p3y - p1y;
+  let v2z = p3z - p1z;
+  
+  let v3x =  v1y*v2z - v1z*v2y;
+  let v3y =  v1z*v2x - v1x*v2z;
+  let v3z =  v1x*v2y - v1y*v2x;
+  
+  vl = Math.sqrt(v3x*v3x+v3y*v3y+v3z*v3z); //Obliczenie długości wektora
+   
+  v3x/=vl; //Normalizacja na zakreś -1 1
+  v3y/=vl;
+  v3z/=vl;
+  
+  let vertexNormal = [v3x,v3y,v3z, v3x,v3y,v3z, v3x,v3y,v3z];
+  return vertexNormal;
+}
+
+function CreateShpere(x,y,z,radius, numStepsElevation, numStepsAngle)
+{
+  //Opis sceny 3D, położenie punktów w przestrzeni 3D w formacie X,Y,Z 
+  let vertexPosition = []; //3 punkty po 3 składowe - X1,Y1,Z1, X2,Y2,Z2, X3,Y3,Z3 - 1 trójkąt
+  let vertexNormal = [];
+  let vertexColor = []; //3 punkty po 3 składowe - R1,G1,B1, R2,G2,B2, R3,G3,B3 - 1 trójkąt
+  let vertexCoords = []; //3 punkty po 2 składowe - U1,V1, U2,V2, U3,V3 - 1 trójkąt
+  
+  let stepElevation = 90/numStepsElevation;
+  let stepAngle = 360/numStepsAngle;
+  for(let elevation=-90; elevation< 90; elevation+= stepElevation)
+  {
+    let radiusXZ = radius*Math.cos(elevation*Math.PI/180);
+    let radiusY  = radius*Math.sin(elevation*Math.PI/180);
+    
+    let radiusXZ2 = radius*Math.cos((elevation+stepElevation)*Math.PI/180);
+    let radiusY2  = radius*Math.sin((elevation+stepElevation)*Math.PI/180);
+    
+    for(let angle = 0; angle < 360; angle+= stepAngle)
+    {
+      
+      let px1 = radiusXZ*Math.cos(angle*Math.PI/180);
+      let py1 = radiusY;
+      let pz1 = radiusXZ*Math.sin(angle*Math.PI/180);
+      
+      let px2 = radiusXZ*Math.cos((angle+stepAngle)*Math.PI/180);
+      let py2 = radiusY;
+      let pz2 = radiusXZ*Math.sin((angle+stepAngle)*Math.PI/180);
+      
+      let px3 = radiusXZ2*Math.cos(angle*Math.PI/180);
+      let py3 = radiusY2;
+      let pz3 = radiusXZ2*Math.sin(angle*Math.PI/180);
+      
+      let px4 = radiusXZ2*Math.cos((angle+stepAngle)*Math.PI/180);
+      let py4 = radiusY2;
+      let pz4 = radiusXZ2*Math.sin((angle+stepAngle)*Math.PI/180);
+      
+      vertexPosition.push(...createRect2(px1+x,py1+y,pz1+z,px2+x,py2+y,pz2+z,px3+x,py3+y,pz3+z,px4+x,py4+y,pz4+z));
+      
+      let p1 = Math.sqrt(px1*px1+py1*py1+pz1*pz1)
+      let p2 = Math.sqrt(px2*px2+py2*py2+pz2*pz2)
+      let p3 = Math.sqrt(px3*px3+py3*py3+pz3*pz3)
+      let p4 = Math.sqrt(px4*px4+py4*py4+pz4*pz4)
+      
+      px1 /= -p1
+      py1 /= -p1
+      pz1 /= -p1
+      
+      px2 /= -p2
+      py2 /= -p2
+      pz2 /= -p2
+      
+      px3 /= -p3
+      py3 /= -p3
+      pz3 /= -p3
+      
+      px4 /= -p4
+      py4 /= -p4
+      pz4 /= -p4
+      
+      vertexNormal.push(...createRect2(px1,py1,pz1,px2,py2,pz2,px3,py3,pz3,px4,py4,pz4));
+      
+      vertexColor.push(...createRectColor(1.0,1.0,1.0));
+      
+      vertexCoords.push(...createRectCoords(angle/360.0,(elevation+90.0)/180.0,(stepAngle)/360.0,0.0,0.0,(stepElevation)/180.0));
+    }
+  }
+  
+  return [vertexPosition, vertexColor, vertexCoords, vertexNormal];
+}
+
+function MatrixTransposeInverse(m)
+        {
+          let r = [
+                0, 0, 0, 0,
+                0, 0, 0, 0,
+                0, 0, 0, 0,
+                0, 0, 0, 0
+            ];
+          r[0] = m[5]*m[10]*m[15] - m[5]*m[14]*m[11] - m[6]*m[9]*m[15] + m[6]*m[13]*m[11] + m[7]*m[9]*m[14] - m[7]*m[13]*m[10];
+          r[1] = -m[1]*m[10]*m[15] + m[1]*m[14]*m[11] + m[2]*m[9]*m[15] - m[2]*m[13]*m[11] - m[3]*m[9]*m[14] + m[3]*m[13]*m[10];
+          r[2] = m[1]*m[6]*m[15] - m[1]*m[14]*m[7] - m[2]*m[5]*m[15] + m[2]*m[13]*m[7] + m[3]*m[5]*m[14] - m[3]*m[13]*m[6];
+          r[3] = -m[1]*m[6]*m[11] + m[1]*m[10]*m[7] + m[2]*m[5]*m[11] - m[2]*m[9]*m[7] - m[3]*m[5]*m[10] + m[3]*m[9]*m[6];
+
+          r[4] = -m[4]*m[10]*m[15] + m[4]*m[14]*m[11] + m[6]*m[8]*m[15] - m[6]*m[12]*m[11] - m[7]*m[8]*m[14] + m[7]*m[12]*m[10];
+          r[5] = m[0]*m[10]*m[15] - m[0]*m[14]*m[11] - m[2]*m[8]*m[15] + m[2]*m[12]*m[11] + m[3]*m[8]*m[14] - m[3]*m[12]*m[10];
+          r[6] = -m[0]*m[6]*m[15] + m[0]*m[14]*m[7] + m[2]*m[4]*m[15] - m[2]*m[12]*m[7] - m[3]*m[4]*m[14] + m[3]*m[12]*m[6];
+          r[7] = m[0]*m[6]*m[11] - m[0]*m[10]*m[7] - m[2]*m[4]*m[11] + m[2]*m[8]*m[7] + m[3]*m[4]*m[10] - m[3]*m[8]*m[6];
+
+          r[8] = m[4]*m[9]*m[15] - m[4]*m[13]*m[11] - m[5]*m[8]*m[15] + m[5]*m[12]*m[11] + m[7]*m[8]*m[13] - m[7]*m[12]*m[9];
+          r[9] = -m[0]*m[9]*m[15] + m[0]*m[13]*m[11] + m[1]*m[8]*m[15] - m[1]*m[12]*m[11] - m[3]*m[8]*m[13] + m[3]*m[12]*m[9];
+          r[10] = m[0]*m[5]*m[15] - m[0]*m[13]*m[7] - m[1]*m[4]*m[15] + m[1]*m[12]*m[7] + m[3]*m[4]*m[13] - m[3]*m[12]*m[5];
+          r[11] = -m[0]*m[5]*m[11] + m[0]*m[9]*m[7] + m[1]*m[4]*m[11] - m[1]*m[8]*m[7] - m[3]*m[4]*m[9] + m[3]*m[8]*m[5];
+
+          r[12] = -m[4]*m[9]*m[14] + m[4]*m[13]*m[10] + m[5]*m[8]*m[14] - m[5]*m[12]*m[10] - m[6]*m[8]*m[13] + m[6]*m[12]*m[9];
+          r[13] = m[0]*m[9]*m[14] - m[0]*m[13]*m[10] - m[1]*m[8]*m[14] + m[1]*m[12]*m[10] + m[2]*m[8]*m[13] - m[2]*m[12]*m[9];
+          r[14] = -m[0]*m[5]*m[14] + m[0]*m[13]*m[6] + m[1]*m[4]*m[14] - m[1]*m[12]*m[6] - m[2]*m[4]*m[13] + m[2]*m[12]*m[5];
+          r[15] = m[0]*m[5]*m[10] - m[0]*m[9]*m[6] - m[1]*m[4]*m[10] + m[1]*m[8]*m[6] + m[2]*m[4]*m[9] - m[2]*m[8]*m[5];
+
+          var det = m[0]*r[0] + m[1]*r[4] + m[2]*r[8] + m[3]*r[12];
+          for (var i = 0; i < 16; i++) r[i] /= det;
+          
+          let rt = [ r[0], r[4], r[8], r[12],
+                     r[1], r[5], r[9], r[13],
+                     r[2], r[6], r[10], r[14],
+                     r[3], r[7], r[11], r[15]
+                     ];
+          
+          return rt;
+        }
+
+function startGL() 
+{
+  alert("StartGL");
+  let canvas = document.getElementById("canvas3D"); //wyszukanie obiektu w strukturze strony 
+  gl = canvas.getContext("experimental-webgl"); //pobranie kontekstu OpenGL'u z obiektu canvas
+  gl.viewportWidth = canvas.width; //przypisanie wybranej przez nas rozdzielczości do systemu OpenGL
+  gl.viewportHeight = canvas.height;
+  
+    //Kod shaderów
+  const vertextShaderSource = ` //Znak akcentu z przycisku tyldy - na lewo od przycisku 1 na klawiaturze
+    precision highp float;
+    attribute vec3 aVertexPosition; 
+    attribute vec3 aVertexColor;
+    attribute vec2 aVertexCoords;
+    attribute vec3 aVertexNormal;
+	uniform mat4 uVMatrix;
+    uniform mat4 uMMatrix;
+    uniform mat4 uMMatrix2;
+    uniform mat4 uMVMatrix;
+    uniform mat4 uPMatrix;
+    varying vec3 vPos;
+    varying vec3 vColor;
+    varying vec2 vTexUV;
+    varying vec3 vNormal;
+    void main(void) {
+	  vec4 tmp = uMMatrix * vec4(aVertexPosition, 1.0);
+	  //gl_Position = uPMatrix * uVMatrix * tmp; //Dokonanie transformacji położenia punktów z przestrzeni 3D do przestrzeni obrazu (2D)
+      gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0); //Dokonanie transformacji położenia punktów z przestrzeni 3D do przestrzeni obrazu (2D)
+      vPos = aVertexPosition;
+      vColor = aVertexColor;
+      vTexUV = aVertexCoords;
+      vNormal = aVertexNormal;
+	  //vNormal = normalize(mat3(uMMatrix2) * aVertexNormal); //Obrot wektorow normalnych
+    }
+  `;
+  const fragmentShaderSource = `
+    precision highp float;
+    varying vec3 vPos;
+    varying vec3 vColor;
+    varying vec2 vTexUV;
+    varying vec3 vNormal;
+    uniform sampler2D uSampler;
+    uniform vec3 uLightPosition;
+    void main(void) {
+       vec3 lightDirection = normalize(uLightPosition - vPos);
+       float brightness = max(dot(vNormal,lightDirection), 0.0);
+      //gl_FragColor = vec4(vColor,1.0); //Ustalenie stałego koloru wszystkich punktów sceny
+      //gl_FragColor = texture2D(uSampler,vTexUV)*vec4(vColor,1.0); //Odczytanie punktu tekstury i przypisanie go jako koloru danego punktu renderowaniej figury
+      //gl_FragColor = vec4((vNormal+vec3(1.0,1.0,1.0))/2.0,1.0); 
+      gl_FragColor = clamp(texture2D(uSampler,vTexUV) * vec4(brightness,brightness,brightness,1.0),0.0,1.0);
+    }
+  `;
+  let fragmentShader = gl.createShader(gl.FRAGMENT_SHADER); //Stworzenie obiektu shadera 
+  let vertexShader   = gl.createShader(gl.VERTEX_SHADER);
+  gl.shaderSource(fragmentShader, fragmentShaderSource); //Podpięcie źródła kodu shader
+  gl.shaderSource(vertexShader, vertextShaderSource);
+  gl.compileShader(fragmentShader); //Kompilacja kodu shader
+  gl.compileShader(vertexShader);
+  if (!gl.getShaderParameter(fragmentShader, gl.COMPILE_STATUS)) { //Sprawdzenie ewentualnych błedów kompilacji
+    alert(gl.getShaderInfoLog(fragmentShader));
+    return null;
+  }
+  if (!gl.getShaderParameter(vertexShader, gl.COMPILE_STATUS)) {
+    alert(gl.getShaderInfoLog(vertexShader));
+    return null;
+  }
+  
+  shaderProgram = gl.createProgram(); //Stworzenie obiektu programu 
+  gl.attachShader(shaderProgram, vertexShader); //Podpięcie obu shaderów do naszego programu wykonywanego na karcie graficznej
+  gl.attachShader(shaderProgram, fragmentShader);
+  gl.linkProgram(shaderProgram);
+  if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) alert("Could not initialise shaders");  //Sprawdzenie ewentualnych błedów
+  
+  //Opis sceny 3D, położenie punktów w przestrzeni 3D w formacie X,Y,Z 
+  let vertexPosition; //3 punkty po 3 składowe - X1,Y1,Z1, X2,Y2,Z2, X3,Y3,Z3 - 1 trójkąt
+  let vertexColor; //3 punkty po 3 składowe - R1,G1,B1, R2,G2,B2, R3,G3,B3 - 1 trójkąt
+  let vertexCoords; //3 punkty po 2 składowe - U1,V1, U2,V2, U3,V3 - 1 trójkąt
+  let vertexNormal;
+  
+  [vertexPosition, vertexColor, vertexCoords, vertexNormal] = CreateShpere(0,0,0,2, 6, 12); 
+  
+  vertexPositionBuffer = gl.createBuffer(); //Stworzenie tablicy w pamieci karty graficznej
+  gl.bindBuffer(gl.ARRAY_BUFFER, vertexPositionBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertexPosition), gl.STATIC_DRAW);
+  vertexPositionBuffer.itemSize = 3; //zdefiniowanie liczby współrzednych per wierzchołek
+  vertexPositionBuffer.numItems = vertexPosition.length/9; //Zdefinoiowanie liczby trójkątów w naszym buforze
+  
+  vertexColorBuffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, vertexColorBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertexColor), gl.STATIC_DRAW);
+  vertexColorBuffer.itemSize = 3;
+  vertexColorBuffer.numItems = vertexColor.length/9;
+  
+  vertexCoordsBuffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, vertexCoordsBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertexCoords), gl.STATIC_DRAW);
+  vertexCoordsBuffer.itemSize = 2;
+  vertexCoordsBuffer.numItems = vertexCoords.length/6;
+  
+  vertexNormalBuffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, vertexNormalBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertexNormal), gl.STATIC_DRAW);
+  vertexNormalBuffer.itemSize = 3;
+  vertexNormalBuffer.numItems = vertexNormal.length/9;
+  
+  
+  textureBufferSlonce = gl.createTexture();
+  var textureImgSlonce = new Image();
+  textureImgSlonce.onload = function() { //Wykonanie kodu automatycznie po załadowaniu obrazka
+    gl.bindTexture(gl.TEXTURE_2D, textureBufferSlonce);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, textureImgSlonce); //Faktyczne załadowanie danych obrazu do pamieci karty graficznej
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); //Ustawienie parametrów próbkowania tekstury
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  }
+  textureImgSlonce.src="slonce.png"; //Nazwa obrazka
+  
+  textureBufferMerkury = gl.createTexture();
+  var textureImgMerkury = new Image();
+  textureImgMerkury.onload = function() { //Wykonanie kodu automatycznie po załadowaniu obrazka
+    gl.bindTexture(gl.TEXTURE_2D, textureBufferMerkury);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, textureImgMerkury); //Faktyczne załadowanie danych obrazu do pamieci karty graficznej
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); //Ustawienie parametrów próbkowania tekstury
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  }
+  textureImgMerkury.src="merkury.png"; //Nazwa obrazka
+  
+  textureBufferWenus = gl.createTexture();
+  var textureImgWenus = new Image();
+  textureImgWenus.onload = function() { //Wykonanie kodu automatycznie po załadowaniu obrazka
+    gl.bindTexture(gl.TEXTURE_2D, textureBufferWenus);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, textureImgWenus); //Faktyczne załadowanie danych obrazu do pamieci karty graficznej
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); //Ustawienie parametrów próbkowania tekstury
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  }
+  textureImgWenus.src="wenus.png"; //Nazwa obrazka
+  
+  textureBufferKsiezyc = gl.createTexture();
+  var textureImgKsiezyc = new Image();
+  textureImgKsiezyc.onload = function() { //Wykonanie kodu automatycznie po załadowaniu obrazka
+    gl.bindTexture(gl.TEXTURE_2D, textureBufferKsiezyc);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, textureImgKsiezyc); //Faktyczne załadowanie danych obrazu do pamieci karty graficznej
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); //Ustawienie parametrów próbkowania tekstury
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  }
+  textureImgKsiezyc.src="ksiezyc.png"; //Nazwa obrazka
+  
+  textureBufferZiemia = gl.createTexture();
+  var textureImgZiemia = new Image();
+  textureImgZiemia.onload = function() { //Wykonanie kodu automatycznie po załadowaniu obrazka
+    gl.bindTexture(gl.TEXTURE_2D, textureBufferZiemia);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, textureImgZiemia); //Faktyczne załadowanie danych obrazu do pamieci karty graficznej
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); //Ustawienie parametrów próbkowania tekstury
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  }
+  textureImgZiemia.src="ziemia.jpg"; //Nazwa obrazka
+  
+  textureBufferDeimos = gl.createTexture();
+  var textureImgDeimos = new Image();
+  textureImgDeimos.onload = function() { //Wykonanie kodu automatycznie po załadowaniu obrazka
+    gl.bindTexture(gl.TEXTURE_2D, textureBufferDeimos);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, textureImgDeimos); //Faktyczne załadowanie danych obrazu do pamieci karty graficznej
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); //Ustawienie parametrów próbkowania tekstury
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  }
+  textureImgDeimos.src="deimos.png"; //Nazwa obrazka
+  
+  textureBufferFobos = gl.createTexture();
+  var textureImgFobos = new Image();
+  textureImgFobos.onload = function() { //Wykonanie kodu automatycznie po załadowaniu obrazka
+    gl.bindTexture(gl.TEXTURE_2D, textureBufferFobos);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, textureImgFobos); //Faktyczne załadowanie danych obrazu do pamieci karty graficznej
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); //Ustawienie parametrów próbkowania tekstury
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  }
+  textureImgFobos.src="fobos.png"; //Nazwa obrazka
+  
+  textureBufferMars = gl.createTexture();
+  var textureImgMars = new Image();
+  textureImgMars.onload = function() { //Wykonanie kodu automatycznie po załadowaniu obrazka
+    gl.bindTexture(gl.TEXTURE_2D, textureBufferMars);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, textureImgMars); //Faktyczne załadowanie danych obrazu do pamieci karty graficznej
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); //Ustawienie parametrów próbkowania tekstury
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  }
+  textureImgMars.src="mars.png"; //Nazwa obrazka
+  
+  textureBufferKallisto = gl.createTexture();
+  var textureImgKallisto = new Image();
+  textureImgKallisto.onload = function() { //Wykonanie kodu automatycznie po załadowaniu obrazka
+    gl.bindTexture(gl.TEXTURE_2D, textureBufferKallisto);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, textureImgKallisto); //Faktyczne załadowanie danych obrazu do pamieci karty graficznej
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); //Ustawienie parametrów próbkowania tekstury
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  }
+  textureImgKallisto.src="kallisto.png"; //Nazwa obrazka 
+  
+  textureBufferGanimedes = gl.createTexture();
+  var textureImgGanimedes = new Image();
+  textureImgGanimedes.onload = function() { //Wykonanie kodu automatycznie po załadowaniu obrazka
+    gl.bindTexture(gl.TEXTURE_2D, textureBufferGanimedes);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, textureImgGanimedes); //Faktyczne załadowanie danych obrazu do pamieci karty graficznej
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); //Ustawienie parametrów próbkowania tekstury
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  }
+  textureImgGanimedes.src="ganimedes.png"; //Nazwa obrazka
+  
+  textureBufferEuropa = gl.createTexture();
+  var textureImgEuropa = new Image();
+  textureImgEuropa.onload = function() { //Wykonanie kodu automatycznie po załadowaniu obrazka
+    gl.bindTexture(gl.TEXTURE_2D, textureBufferEuropa);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, textureImgEuropa); //Faktyczne załadowanie danych obrazu do pamieci karty graficznej
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); //Ustawienie parametrów próbkowania tekstury
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  }
+  textureImgEuropa.src="europa.png"; //Nazwa obrazka 
+  
+  textureBufferIo = gl.createTexture();
+  var textureImgIo = new Image();
+  textureImgIo.onload = function() { //Wykonanie kodu automatycznie po załadowaniu obrazka
+    gl.bindTexture(gl.TEXTURE_2D, textureBufferIo);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, textureImgIo); //Faktyczne załadowanie danych obrazu do pamieci karty graficznej
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); //Ustawienie parametrów próbkowania tekstury
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  }
+  textureImgIo.src="io.png"; //Nazwa obrazka   
+
+  textureBufferJowisz = gl.createTexture();
+  var textureImgJowisz = new Image();
+  textureImgJowisz.onload = function() { //Wykonanie kodu automatycznie po załadowaniu obrazka
+    gl.bindTexture(gl.TEXTURE_2D, textureBufferJowisz);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, textureImgJowisz); //Faktyczne załadowanie danych obrazu do pamieci karty graficznej
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); //Ustawienie parametrów próbkowania tekstury
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  }
+  textureImgJowisz.src="jowisz.png"; //Nazwa obrazka
+  
+  textureBufferTytan = gl.createTexture();
+  var textureImgTytan = new Image();
+  textureImgTytan.onload = function() { //Wykonanie kodu automatycznie po załadowaniu obrazka
+    gl.bindTexture(gl.TEXTURE_2D, textureBufferTytan);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, textureImgTytan); //Faktyczne załadowanie danych obrazu do pamieci karty graficznej
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); //Ustawienie parametrów próbkowania tekstury
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  }
+  textureImgTytan.src="tytan.png"; //Nazwa obrazka  
+ 
+  textureBufferSaturn = gl.createTexture();
+  var textureImgSaturn = new Image();
+  textureImgSaturn.onload = function() { //Wykonanie kodu automatycznie po załadowaniu obrazka
+    gl.bindTexture(gl.TEXTURE_2D, textureBufferSaturn);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, textureImgSaturn); //Faktyczne załadowanie danych obrazu do pamieci karty graficznej
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); //Ustawienie parametrów próbkowania tekstury
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  }
+  textureImgSaturn.src="saturn.png"; //Nazwa obrazka  
+  
+  textureBufferOberon = gl.createTexture();
+  var textureImgOberon = new Image();
+  textureImgOberon.onload = function() { //Wykonanie kodu automatycznie po załadowaniu obrazka
+    gl.bindTexture(gl.TEXTURE_2D, textureBufferOberon);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, textureImgOberon); //Faktyczne załadowanie danych obrazu do pamieci karty graficznej
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); //Ustawienie parametrów próbkowania tekstury
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  }
+  textureImgOberon.src="oberon.png"; //Nazwa obrazka 
+
+  textureBufferTytania = gl.createTexture();
+  var textureImgTytania = new Image();
+  textureImgTytania.onload = function() { //Wykonanie kodu automatycznie po załadowaniu obrazka
+    gl.bindTexture(gl.TEXTURE_2D, textureBufferTytania);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, textureImgTytania); //Faktyczne załadowanie danych obrazu do pamieci karty graficznej
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); //Ustawienie parametrów próbkowania tekstury
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  }
+  textureImgTytania.src="tytania.png"; //Nazwa obrazka  
+
+  textureBufferUran = gl.createTexture();
+  var textureImgUran = new Image();
+  textureImgUran.onload = function() { //Wykonanie kodu automatycznie po załadowaniu obrazka
+    gl.bindTexture(gl.TEXTURE_2D, textureBufferUran);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, textureImgUran); //Faktyczne załadowanie danych obrazu do pamieci karty graficznej
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); //Ustawienie parametrów próbkowania tekstury
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  }
+  textureImgUran.src="uran.png"; //Nazwa obrazka   
+
+  textureBufferTryton = gl.createTexture();
+  var textureImgTryton = new Image();
+  textureImgTryton.onload = function() { //Wykonanie kodu automatycznie po załadowaniu obrazka
+    gl.bindTexture(gl.TEXTURE_2D, textureBufferTryton);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, textureImgTryton); //Faktyczne załadowanie danych obrazu do pamieci karty graficznej
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); //Ustawienie parametrów próbkowania tekstury
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  }
+  textureImgTryton.src="tryton.png"; //Nazwa obrazka   
+  
+  textureBufferNeptun = gl.createTexture();
+  var textureImgNeptun = new Image();
+  textureImgNeptun.onload = function() { //Wykonanie kodu automatycznie po załadowaniu obrazka
+    gl.bindTexture(gl.TEXTURE_2D, textureBufferNeptun);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, textureImgNeptun); //Faktyczne załadowanie danych obrazu do pamieci karty graficznej
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); //Ustawienie parametrów próbkowania tekstury
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  }
+  textureImgNeptun.src="neptun.png"; //Nazwa obrazka     
+ 
+  //Macierze opisujące położenie wirtualnej kamery w przestrzenie 3D
+  let aspect = gl.viewportWidth/gl.viewportHeight;
+  let fov = 45.0 * Math.PI / 180.0; //Określenie pola widzenia kamery
+  let zFar = 1000.0; //Ustalenie zakresów renderowania sceny 3D (od obiektu najbliższego zNear do najdalszego zFar)
+  let zNear = 0.1;
+  uPMatrix = [
+   1.0/(aspect*Math.tan(fov/2)),0                           ,0                         ,0                            ,
+   0                         ,1.0/(Math.tan(fov/2))         ,0                         ,0                            ,
+   0                         ,0                           ,-(zFar+zNear)/(zFar-zNear)  , -1,
+   0                         ,0                           ,-(2*zFar*zNear)/(zFar-zNear) ,0.0,
+  ];
+  Tick();
+} 
+//let angle = 45.0; //Macierz transformacji świata - określenie położenia kamery
+
+var angleZ = 0.0;
+var angleY = 0.0;
+var angleX = 0.0;
+
+var tx = 0.0;
+var ty = 0.0;
+var tz = -700.0;
+
+var objectSlonceX = 0.0;
+var objectSlonceY = 0.0;
+var objectSlonceZ = 0.0;
+
+var objectMerkuryX = 60.0;
+var objectMerkuryY = 0.0;
+var objectMerkuryZ = 0.0;
+
+var objectWenusX = 80.0;
+var objectWenusY = 0.0;
+var objectWenusZ = 0.0;
+
+var objectKsiezycX = 95.0;
+var objectKsiezycY = 0.0;
+var objectKsiezycZ = 0.0;
+var objectZiemiaX = 100.0;
+var objectZiemiaY = 0.0;
+var objectZiemiaZ = 0.0;
+
+var objectDeimosX = 136.0;
+var objectDeimosY = 0.0;
+var objectDeimosZ = 0.0;
+var objectFobosX = 137.0;
+var objectFobosY = 0.0;
+var objectFobosZ = 0.0;
+var objectMarsX = 140.0;
+var objectMarsY = 0.0;
+var objectMarsZ = 0.0;
+
+var objectKallistoX = 174.0;
+var objectKallistoY = 0.0;
+var objectKallistoZ = 0.0;
+var objectGanimedesX = 176.0;
+var objectGanimedesY = 0.0;
+var objectGanimedesZ = 0.0;
+var objectEuropaX = 178.0;
+var objectEuropaY = 0.0;
+var objectEuropaZ = 0.0;
+var objectIoX = 179.0;
+var objectIoY = 0.0;
+var objectIoZ = 0.0;
+var objectJowiszX = 200.0;
+var objectJowiszY = 0.0;
+var objectJowiszZ = 0.0;
+
+var objectTytanX = 257.5;
+var objectTytanY = 0.0;
+var objectTytanZ = 0.0;
+var objectSaturnX = 280.0;
+var objectSaturnY = 0.0;
+var objectSaturnZ = 0.0;
+
+var objectOberonX = 388.0;
+var objectOberonY = 0.0;
+var objectOberonZ = 0.0;
+var objectTytaniaX = 390.0;
+var objectTytaniaY = 0.0;
+var objectTytaniaZ = 0.0;
+var objectUranX = 400.0;
+var objectUranY = 0.0;
+var objectUranZ = 0.0;
+
+var objectTrytonX = 510.0;
+var objectTrytonY = 0.0;
+var objectTrytonZ = 0.0;
+var objectNeptunX = 520.0;
+var objectNeptunY = 0.0;
+var objectNeptunZ = 0.0;
+
+var scaleSlonce = 25.0;
+var scaleMerkury = 1.0;
+var scaleWenus = 2.0;
+var scaleKsiezyc = 0.2;
+var scaleZiemia = 2.0;
+var scaleDeimos = 0.1;
+var scaleFobos = 0.2;
+var scaleMars = 1.0;
+var scaleKallisto = 0.3;
+var scaleGanimedes = 0.3;
+var scaleEuropa = 0.2;
+var scaleIo = 0.2;
+var scaleJowisz = 10.0;
+var scaleTytan = 0.5;
+var scaleSaturn = 9.0;
+var scaleOberon = 0.2;
+var scaleTytania = 0.2;
+var scaleUran = 4.0;
+var scaleTryton = 0.2;
+var scaleNeptun = 4.0;
+
+var lightX = 0;
+var lightY = 0;
+var lightZ = 0;
+
+function Tick()
+{  
+  let uMVMatrixSlonce = [
+  1,0,0,0, //Macierz jednostkowa
+  0,1,0,0,
+  0,0,1,0,
+  0,0,0,1
+  ]; 
+  let uMVMatrixMerkury = [
+  1,0,0,0, //Macierz jednostkowa
+  0,1,0,0,
+  0,0,1,0,
+  0,0,0,1
+  ];
+  let uMVMatrixWenus = [
+  1,0,0,0, //Macierz jednostkowa
+  0,1,0,0,
+  0,0,1,0,
+  0,0,0,1
+  ]; 
+  let uMVMatrixKsiezyc = [
+  1,0,0,0, //Macierz jednostkowa
+  0,1,0,0,
+  0,0,1,0,
+  0,0,0,1
+  ];
+  let uMVMatrixZiemia = [
+  1,0,0,0, //Macierz jednostkowa
+  0,1,0,0,
+  0,0,1,0,
+  0,0,0,1
+  ];
+  let uMVMatrixDeimos = [
+  1,0,0,0, //Macierz jednostkowa
+  0,1,0,0,
+  0,0,1,0,
+  0,0,0,1
+  ];
+  let uMVMatrixFobos = [
+  1,0,0,0, //Macierz jednostkowa
+  0,1,0,0,
+  0,0,1,0,
+  0,0,0,1
+  ]; 
+  let uMVMatrixMars = [
+  1,0,0,0, //Macierz jednostkowa
+  0,1,0,0,
+  0,0,1,0,
+  0,0,0,1
+  ];
+  let uMVMatrixKallisto = [
+  1,0,0,0, //Macierz jednostkowa
+  0,1,0,0,
+  0,0,1,0,
+  0,0,0,1
+  ];
+  let uMVMatrixGanimedes = [
+  1,0,0,0, //Macierz jednostkowa
+  0,1,0,0,
+  0,0,1,0,
+  0,0,0,1
+  ];  
+  let uMVMatrixEuropa = [
+  1,0,0,0, //Macierz jednostkowa
+  0,1,0,0,
+  0,0,1,0,
+  0,0,0,1
+  ];  
+  let uMVMatrixIo = [
+  1,0,0,0, //Macierz jednostkowa
+  0,1,0,0,
+  0,0,1,0,
+  0,0,0,1
+  ];
+  let uMVMatrixJowisz = [
+  1,0,0,0, //Macierz jednostkowa
+  0,1,0,0,
+  0,0,1,0,
+  0,0,0,1
+  ];
+  let uMVMatrixTytan = [
+  1,0,0,0, //Macierz jednostkowa
+  0,1,0,0,
+  0,0,1,0,
+  0,0,0,1
+  ]; 
+  let uMVMatrixSaturn = [
+  1,0,0,0, //Macierz jednostkowa
+  0,1,0,0,
+  0,0,1,0,
+  0,0,0,1
+  ]; 
+  let uMVMatrixOberon = [
+  1,0,0,0, //Macierz jednostkowa
+  0,1,0,0,
+  0,0,1,0,
+  0,0,0,1
+  ]; 
+  let uMVMatrixTytania = [
+  1,0,0,0, //Macierz jednostkowa
+  0,1,0,0,
+  0,0,1,0,
+  0,0,0,1
+  ]; 
+  let uMVMatrixUran = [
+  1,0,0,0, //Macierz jednostkowa
+  0,1,0,0,
+  0,0,1,0,
+  0,0,0,1
+  ];  
+  let uMVMatrixTryton = [
+  1,0,0,0, //Macierz jednostkowa
+  0,1,0,0,
+  0,0,1,0,
+  0,0,0,1
+  ];  
+  let uMVMatrixNeptun = [
+  1,0,0,0, //Macierz jednostkowa
+  0,1,0,0,
+  0,0,1,0,
+  0,0,0,1
+  ];   
+  
+  let uMVRotZ = [
+  +Math.cos(angleZ*Math.PI/180.0),+Math.sin(angleZ*Math.PI/180.0),0,0,
+  -Math.sin(angleZ*Math.PI/180.0),+Math.cos(angleZ*Math.PI/180.0),0,0,
+  0,0,1,0,
+  0,0,0,1
+  ];
+  
+  let uMVRotY = [
+  +Math.cos(angleY*Math.PI/180.0),0,-Math.sin(angleY*Math.PI/180.0),0,
+  0,1,0,0,
+  +Math.sin(angleY*Math.PI/180.0),0,+Math.cos(angleY*Math.PI/180.0),0,
+  0,0,0,1
+  ];
+  
+  let uMVRotYSlonce = [
+  +Math.cos(angleY*Math.PI/180.0),0,-Math.sin(angleY*Math.PI/180.0),0,
+  0,1,0,0,
+  +Math.sin(angleY*Math.PI/180.0),0,+Math.cos(angleY*Math.PI/180.0),0,
+  0,0,0,1
+  ];
+  
+  let uMVRotYMerkury = [
+  +Math.cos((angleY*Math.PI/180.0)/0.24),0,-Math.sin((angleY*Math.PI/180.0)/0.24),0,
+  0,1,0,0,
+  +Math.sin((angleY*Math.PI/180.0)/0.24),0,+Math.cos((angleY*Math.PI/180.0)/0.24),0,
+  0,0,0,1
+  ];  
+  let uMVRotYMerkuryOs = [
+  +Math.cos((angleY*Math.PI/180.0)/58.6),0,-Math.sin((angleY*Math.PI/180.0)/58.6),0,
+  0,1,0,0,
+  +Math.sin((angleY*Math.PI/180.0)/58.6),0,+Math.cos((angleY*Math.PI/180.0)/58.6),0,
+  0,0,0,1
+  ];
+
+  let uMVRotYWenus = [
+  +Math.cos((angleY*Math.PI/180.0)/0.62),0,-Math.sin((angleY*Math.PI/180.0)/0.62),0,
+  0,1,0,0,
+  +Math.sin((angleY*Math.PI/180.0)/0.62),0,+Math.cos((angleY*Math.PI/180.0)/0.62),0,
+  0,0,0,1
+  ];   
+  let uMVRotYWenusOs = [
+  +Math.cos((angleY*Math.PI/180.0)/243.0),0,-Math.sin((angleY*Math.PI/180.0)/-243.0),0,
+  0,1,0,0,
+  +Math.sin((angleY*Math.PI/180.0)/-243.0),0,+Math.cos((angleY*Math.PI/180.0)/243.0),0,
+  0,0,0,1
+  ];  
+  
+  let uMVRotYZiemiaOs = [
+  +Math.cos(1.5*angleY*Math.PI/180.0),0,-Math.sin(1.5*angleY*Math.PI/180.0),0,
+  0,1,0,0,
+  +Math.sin(1.5*angleY*Math.PI/180.0),0,+Math.cos(1.5*angleY*Math.PI/180.0),0,
+  0,0,0,1
+  ];  
+
+  let uMVRotYMars = [
+  +Math.cos((angleY*Math.PI/180.0)/1.88),0,-Math.sin((angleY*Math.PI/180.0)/1.88),0,
+  0,1,0,0,
+  +Math.sin((angleY*Math.PI/180.0)/1.88),0,+Math.cos((angleY*Math.PI/180.0)/1.88),0,
+  0,0,0,1
+  ];   
+  let uMVRotYMarsOs = [
+  +Math.cos((angleY*Math.PI/180.0)/0.03),0,-Math.sin((angleY*Math.PI/180.0)/0.03),0,
+  0,1,0,0,
+  +Math.sin((angleY*Math.PI/180.0)/0.03),0,+Math.cos((angleY*Math.PI/180.0)/0.03),0,
+  0,0,0,1
+  ];    
+  
+  let uMVRotYJowisz = [
+  +Math.cos((angleY*Math.PI/180.0)/11.86),0,-Math.sin((angleY*Math.PI/180.0)/11.86),0,
+  0,1,0,0,
+  +Math.sin((angleY*Math.PI/180.0)/11.86),0,+Math.cos((angleY*Math.PI/180.0)/11.86),0,
+  0,0,0,1
+  ];  
+  let uMVRotYJowiszOs = [
+  +Math.cos((angleY*Math.PI/180.0)/0.42),0,-Math.sin((angleY*Math.PI/180.0)/0.42),0,
+  0,1,0,0,
+  +Math.sin((angleY*Math.PI/180.0)/0.42),0,+Math.cos((angleY*Math.PI/180.0)/0.42),0,
+  0,0,0,1
+  ]; 
+
+  let uMVRotYSaturn = [
+  +Math.cos((angleY*Math.PI/180.0)/29.45),0,-Math.sin((angleY*Math.PI/180.0)/29.45),0,
+  0,1,0,0,
+  +Math.sin((angleY*Math.PI/180.0)/29.45),0,+Math.cos((angleY*Math.PI/180.0)/29.45),0,
+  0,0,0,1
+  ];  
+  let uMVRotYSaturnOs = [
+  +Math.cos((angleY*Math.PI/180.0)/0.44),0,-Math.sin((angleY*Math.PI/180.0)/0.44),0,
+  0,1,0,0,
+  +Math.sin((angleY*Math.PI/180.0)/0.44),0,+Math.cos((angleY*Math.PI/180.0)/0.44),0,
+  0,0,0,1
+  ];  
+
+  let uMVRotYUran = [
+  +Math.cos((angleY*Math.PI/180.0)/84.07),0,-Math.sin((angleY*Math.PI/180.0)/84.07),0,
+  0,1,0,0,
+  +Math.sin((angleY*Math.PI/180.0)/84.07),0,+Math.cos((angleY*Math.PI/180.0)/84.07),0,
+  0,0,0,1
+  ];  
+  let uMVRotYUranOs = [
+  +Math.cos((angleY*Math.PI/180.0)/0.72),0,-Math.sin((angleY*Math.PI/180.0)/0.72),0,
+  0,1,0,0,
+  +Math.sin((angleY*Math.PI/180.0)/0.72),0,+Math.cos((angleY*Math.PI/180.0)/0.72),0,
+  0,0,0,1
+  ];  
+  
+  let uMVRotYNeptun = [
+  +Math.cos((angleY*Math.PI/180.0)/164.88),0,-Math.sin((angleY*Math.PI/180.0)/164.88),0,
+  0,1,0,0,
+  +Math.sin((angleY*Math.PI/180.0)/164.88),0,+Math.cos((angleY*Math.PI/180.0)/164.88),0,
+  0,0,0,1
+  ];  
+  let uMVRotYNeptunOs = [
+  +Math.cos((angleY*Math.PI/180.0)/0.67),0,-Math.sin((angleY*Math.PI/180.0)/0.67),0,
+  0,1,0,0,
+  +Math.sin((angleY*Math.PI/180.0)/0.67),0,+Math.cos((angleY*Math.PI/180.0)/0.67),0,
+  0,0,0,1
+  ];   
+  
+  let uMVRotX = [
+  1,0,0,0,
+  0,+Math.cos(angleX*Math.PI/180.0),+Math.sin(angleX*Math.PI/180.0),0,
+  0,-Math.sin(angleX*Math.PI/180.0),+Math.cos(angleX*Math.PI/180.0),0,
+  0,0,0,1
+  ];
+  
+  let uMVTranslateX = [
+  1,0,0,0,
+  0,1,0,0,
+  0,0,1,0,
+  tx,0,0,1
+  ];
+  
+  let uMVTranslateY = [
+  1,0,0,0,
+  0,1,0,0,
+  0,0,1,0,
+  0,ty,0,1
+  ];
+  
+  let uMVTranslateZ = [
+  1,0,0,0,
+  0,1,0,0,
+  0,0,1,0,
+  0,0,tz,1
+  ];
+  
+  let uMVscaleSlonce = [
+  scaleSlonce,0,0,0,
+  0,scaleSlonce,0,0,
+  0,0,scaleSlonce,0,
+  0,0,0,1
+  ];
+  let uMVscaleMerkury = [
+  scaleMerkury,0,0,0,
+  0,scaleMerkury,0,0,
+  0,0,scaleMerkury,0,
+  0,0,0,1
+  ];
+  let uMVscaleWenus = [
+  scaleWenus,0,0,0,
+  0,scaleWenus,0,0,
+  0,0,scaleWenus,0,
+  0,0,0,1
+  ];
+  let uMVscaleKsiezyc = [
+  scaleKsiezyc,0,0,0,
+  0,scaleKsiezyc,0,0,
+  0,0,scaleKsiezyc,0,
+  0,0,0,1
+  ];
+  let uMVscaleZiemia = [
+  scaleZiemia,0,0,0,
+  0,scaleZiemia,0,0,
+  0,0,scaleZiemia,0,
+  0,0,0,1
+  ];
+  let uMVscaleDeimos = [
+  scaleDeimos,0,0,0,
+  0,scaleDeimos,0,0,
+  0,0,scaleDeimos,0,
+  0,0,0,1
+  ]; 
+  let uMVscaleFobos = [
+  scaleFobos,0,0,0,
+  0,scaleFobos,0,0,
+  0,0,scaleFobos,0,
+  0,0,0,1
+  ];
+  let uMVscaleMars = [
+  scaleMars,0,0,0,
+  0,scaleMars,0,0,
+  0,0,scaleMars,0,
+  0,0,0,1
+  ];
+  let uMVscaleKallisto = [
+  scaleKallisto,0,0,0,
+  0,scaleKallisto,0,0,
+  0,0,scaleKallisto,0,
+  0,0,0,1
+  ];
+  let uMVscaleGanimedes = [
+  scaleGanimedes,0,0,0,
+  0,scaleGanimedes,0,0,
+  0,0,scaleGanimedes,0,
+  0,0,0,1
+  ];
+  let uMVscaleEuropa = [
+  scaleEuropa,0,0,0,
+  0,scaleEuropa,0,0,
+  0,0,scaleEuropa,0,
+  0,0,0,1
+  ];
+  let uMVscaleIo = [
+  scaleIo,0,0,0,
+  0,scaleIo,0,0,
+  0,0,scaleIo,0,
+  0,0,0,1
+  ];
+  let uMVscaleJowisz = [
+  scaleJowisz,0,0,0,
+  0,scaleJowisz,0,0,
+  0,0,scaleJowisz,0,
+  0,0,0,1
+  ];
+  let uMVscaleTytan = [
+  scaleTytan,0,0,0,
+  0,scaleTytan,0,0,
+  0,0,scaleTytan,0,
+  0,0,0,1
+  ];   
+  let uMVscaleSaturn = [
+  scaleSaturn,0,0,0,
+  0,scaleSaturn,0,0,
+  0,0,scaleSaturn,0,
+  0,0,0,1
+  ];  
+  let uMVscaleOberon = [
+  scaleOberon,0,0,0,
+  0,scaleOberon,0,0,
+  0,0,scaleOberon,0,
+  0,0,0,1
+  ]; 
+  let uMVscaleTytania = [
+  scaleTytania,0,0,0,
+  0,scaleTytania,0,0,
+  0,0,scaleTytania,0,
+  0,0,0,1
+  ];
+  let uMVscaleUran = [
+  scaleUran,0,0,0,
+  0,scaleUran,0,0,
+  0,0,scaleUran,0,
+  0,0,0,1
+  ];
+  let uMVscaleTryton = [
+  scaleTryton,0,0,0,
+  0,scaleTryton,0,0,
+  0,0,scaleTryton,0,
+  0,0,0,1
+  ];    
+  let uMVscaleNeptun = [
+  scaleNeptun,0,0,0,
+  0,scaleNeptun,0,0,
+  0,0,scaleNeptun,0,
+  0,0,0,1
+  ];    
+  
+  let uMVObjectSlonce = [
+  1,0,0,0,
+  0,1,0,0,
+  0,0,1,0,
+  objectSlonceX,objectSlonceY,objectSlonceZ,1
+  ];
+  let uMVObjectMerkury = [
+  1,0,0,0,
+  0,1,0,0,
+  0,0,1,0,
+  objectMerkuryX,objectMerkuryY,objectMerkuryZ,1
+  ];  
+  let uMVObjectWenus = [
+  1,0,0,0,
+  0,1,0,0,
+  0,0,1,0,
+  objectWenusX,objectWenusY,objectWenusZ,1
+  ]; 
+  let uMVObjectKsiezyc = [
+  1,0,0,0,
+  0,1,0,0,
+  0,0,1,0,
+  objectKsiezycX,objectKsiezycY,objectKsiezycZ,1
+  ]; 
+  let uMVObjectZiemia = [
+  1,0,0,0,
+  0,1,0,0,
+  0,0,1,0,
+  objectZiemiaX,objectZiemiaY,objectZiemiaZ,1
+  ];  
+  let uMVObjectDeimos = [
+  1,0,0,0,
+  0,1,0,0,
+  0,0,1,0,
+  objectDeimosX,objectDeimosY,objectDeimosZ,1
+  ]; 
+  let uMVObjectFobos = [
+  1,0,0,0,
+  0,1,0,0,
+  0,0,1,0,
+  objectFobosX,objectFobosY,objectFobosZ,1
+  ];  
+  let uMVObjectMars = [
+  1,0,0,0,
+  0,1,0,0,
+  0,0,1,0,
+  objectMarsX,objectMarsY,objectMarsZ,1
+  ]; 
+  let uMVObjectKallisto = [
+  1,0,0,0,
+  0,1,0,0,
+  0,0,1,0,
+  objectKallistoX,objectKallistoY,objectKallistoZ,1
+  ];  
+  let uMVObjectGanimedes = [
+  1,0,0,0,
+  0,1,0,0,
+  0,0,1,0,
+  objectGanimedesX,objectGanimedesY,objectGanimedesZ,1
+  ]; 
+  let uMVObjectEuropa = [
+  1,0,0,0,
+  0,1,0,0,
+  0,0,1,0,
+  objectEuropaX,objectEuropaY,objectEuropaZ,1
+  ];  
+  let uMVObjectIo = [
+  1,0,0,0,
+  0,1,0,0,
+  0,0,1,0,
+  objectIoX,objectIoY,objectIoZ,1
+  ];
+  let uMVObjectJowisz = [
+  1,0,0,0,
+  0,1,0,0,
+  0,0,1,0,
+  objectJowiszX,objectJowiszY,objectJowiszZ,1
+  ];
+  let uMVObjectTytan = [
+  1,0,0,0,
+  0,1,0,0,
+  0,0,1,0,
+  objectTytanX,objectTytanY,objectTytanZ,1
+  ];  
+  let uMVObjectSaturn = [
+  1,0,0,0,
+  0,1,0,0,
+  0,0,1,0,
+  objectSaturnX,objectSaturnY,objectSaturnZ,1
+  ]; 
+  let uMVObjectOberon = [
+  1,0,0,0,
+  0,1,0,0,
+  0,0,1,0,
+  objectOberonX,objectOberonY,objectOberonZ,1
+  ];
+  let uMVObjectTytania = [
+  1,0,0,0,
+  0,1,0,0,
+  0,0,1,0,
+  objectTytaniaX,objectTytaniaY,objectTytaniaZ,1
+  ];  
+  let uMVObjectUran = [
+  1,0,0,0,
+  0,1,0,0,
+  0,0,1,0,
+  objectUranX,objectUranY,objectUranZ,1
+  ];  
+  let uMVObjectTryton = [
+  1,0,0,0,
+  0,1,0,0,
+  0,0,1,0,
+  objectTrytonX,objectTrytonY,objectTrytonZ,1
+  ]; 
+  let uMVObjectNeptun = [
+  1,0,0,0,
+  0,1,0,0,
+  0,0,1,0,
+  objectNeptunX,objectNeptunY,objectNeptunZ,1
+  ];    
+  
+  uMVMatrixSlonce = MatrixMul(uMVMatrixSlonce,uMVscaleSlonce);
+  uMVMatrixSlonce = MatrixMul(uMVMatrixSlonce,uMVObjectSlonce);
+  uMVMatrixSlonce = MatrixMul(uMVMatrixSlonce,uMVRotX);
+  uMVMatrixSlonce = MatrixMul(uMVMatrixSlonce,uMVRotYSlonce);
+  uMVMatrixSlonce = MatrixMul(uMVMatrixSlonce,uMVRotZ);
+  uMVMatrixSlonce = MatrixMul(uMVMatrixSlonce,uMVTranslateZ);
+  uMVMatrixSlonce = MatrixMul(uMVMatrixSlonce,uMVTranslateX);
+  uMVMatrixSlonce = MatrixMul(uMVMatrixSlonce,uMVTranslateY);
+  
+  uMVMatrixMerkury = MatrixMul(uMVMatrixMerkury,uMVscaleMerkury);
+  uMVMatrixMerkury = MatrixMul(uMVMatrixMerkury,uMVRotYMerkuryOs);
+  uMVMatrixMerkury = MatrixMul(uMVMatrixMerkury,uMVObjectMerkury);
+  uMVMatrixMerkury = MatrixMul(uMVMatrixMerkury,uMVRotX);
+  uMVMatrixMerkury = MatrixMul(uMVMatrixMerkury,uMVRotYMerkury);
+  uMVMatrixMerkury = MatrixMul(uMVMatrixMerkury,uMVRotZ);
+  uMVMatrixMerkury = MatrixMul(uMVMatrixMerkury,uMVTranslateZ);
+  uMVMatrixMerkury = MatrixMul(uMVMatrixMerkury,uMVTranslateX);
+  uMVMatrixMerkury = MatrixMul(uMVMatrixMerkury,uMVTranslateY);
+  
+  uMVMatrixWenus = MatrixMul(uMVMatrixWenus,uMVscaleWenus);
+  uMVMatrixWenus = MatrixMul(uMVMatrixWenus,uMVRotYWenusOs);
+  uMVMatrixWenus = MatrixMul(uMVMatrixWenus,uMVObjectWenus);
+  uMVMatrixWenus = MatrixMul(uMVMatrixWenus,uMVRotX);
+  uMVMatrixWenus = MatrixMul(uMVMatrixWenus,uMVRotYWenus);
+  uMVMatrixWenus = MatrixMul(uMVMatrixWenus,uMVRotZ);
+  uMVMatrixWenus = MatrixMul(uMVMatrixWenus,uMVTranslateZ);
+  uMVMatrixWenus = MatrixMul(uMVMatrixWenus,uMVTranslateX);
+  uMVMatrixWenus = MatrixMul(uMVMatrixWenus,uMVTranslateY);
+  
+  uMVMatrixKsiezyc = MatrixMul(uMVMatrixKsiezyc,uMVscaleKsiezyc);
+  uMVMatrixKsiezyc = MatrixMul(uMVMatrixKsiezyc,uMVRotYZiemiaOs);  
+  uMVMatrixKsiezyc = MatrixMul(uMVMatrixKsiezyc,uMVObjectKsiezyc);
+  uMVMatrixKsiezyc = MatrixMul(uMVMatrixKsiezyc,uMVRotX);
+  uMVMatrixKsiezyc = MatrixMul(uMVMatrixKsiezyc,uMVRotY);
+  uMVMatrixKsiezyc = MatrixMul(uMVMatrixKsiezyc,uMVRotZ);
+  uMVMatrixKsiezyc = MatrixMul(uMVMatrixKsiezyc,uMVTranslateZ);
+  uMVMatrixKsiezyc = MatrixMul(uMVMatrixKsiezyc,uMVTranslateX);
+  uMVMatrixKsiezyc = MatrixMul(uMVMatrixKsiezyc,uMVTranslateY);
+  
+  uMVMatrixZiemia = MatrixMul(uMVMatrixZiemia,uMVscaleZiemia);
+  uMVMatrixZiemia = MatrixMul(uMVMatrixZiemia,uMVRotYZiemiaOs)
+  uMVMatrixZiemia = MatrixMul(uMVMatrixZiemia,uMVObjectZiemia);
+  uMVMatrixZiemia = MatrixMul(uMVMatrixZiemia,uMVRotX);
+  uMVMatrixZiemia = MatrixMul(uMVMatrixZiemia,uMVRotY);
+  uMVMatrixZiemia = MatrixMul(uMVMatrixZiemia,uMVRotZ);
+  uMVMatrixZiemia = MatrixMul(uMVMatrixZiemia,uMVTranslateZ);
+  uMVMatrixZiemia = MatrixMul(uMVMatrixZiemia,uMVTranslateX);
+  uMVMatrixZiemia = MatrixMul(uMVMatrixZiemia,uMVTranslateY);
+  
+  uMVMatrixDeimos = MatrixMul(uMVMatrixDeimos,uMVscaleDeimos);
+  uMVMatrixDeimos = MatrixMul(uMVMatrixDeimos,uMVRotYMarsOs);  
+  uMVMatrixDeimos = MatrixMul(uMVMatrixDeimos,uMVObjectDeimos);
+  uMVMatrixDeimos = MatrixMul(uMVMatrixDeimos,uMVRotX);
+  uMVMatrixDeimos = MatrixMul(uMVMatrixDeimos,uMVRotYMars);
+  uMVMatrixDeimos = MatrixMul(uMVMatrixDeimos,uMVRotZ);
+  uMVMatrixDeimos = MatrixMul(uMVMatrixDeimos,uMVTranslateZ);
+  uMVMatrixDeimos = MatrixMul(uMVMatrixDeimos,uMVTranslateX);
+  uMVMatrixDeimos = MatrixMul(uMVMatrixDeimos,uMVTranslateY);
+  
+  uMVMatrixFobos = MatrixMul(uMVMatrixFobos,uMVscaleFobos);
+  uMVMatrixFobos = MatrixMul(uMVMatrixFobos,uMVRotYMarsOs);  
+  uMVMatrixFobos = MatrixMul(uMVMatrixFobos,uMVObjectFobos);
+  uMVMatrixFobos = MatrixMul(uMVMatrixFobos,uMVRotX);
+  uMVMatrixFobos = MatrixMul(uMVMatrixFobos,uMVRotYMars);
+  uMVMatrixFobos = MatrixMul(uMVMatrixFobos,uMVRotZ);
+  uMVMatrixFobos = MatrixMul(uMVMatrixFobos,uMVTranslateZ);
+  uMVMatrixFobos = MatrixMul(uMVMatrixFobos,uMVTranslateX);
+  uMVMatrixFobos = MatrixMul(uMVMatrixFobos,uMVTranslateY);
+  
+  uMVMatrixMars = MatrixMul(uMVMatrixMars,uMVscaleMars);
+  uMVMatrixMars = MatrixMul(uMVMatrixMars,uMVRotYMarsOs);  
+  uMVMatrixMars = MatrixMul(uMVMatrixMars,uMVObjectMars);
+  uMVMatrixMars = MatrixMul(uMVMatrixMars,uMVRotX);
+  uMVMatrixMars = MatrixMul(uMVMatrixMars,uMVRotYMars);
+  uMVMatrixMars = MatrixMul(uMVMatrixMars,uMVRotZ);
+  uMVMatrixMars = MatrixMul(uMVMatrixMars,uMVTranslateZ);
+  uMVMatrixMars = MatrixMul(uMVMatrixMars,uMVTranslateX);
+  uMVMatrixMars = MatrixMul(uMVMatrixMars,uMVTranslateY);
+  
+  uMVMatrixKallisto = MatrixMul(uMVMatrixKallisto,uMVscaleKallisto);
+  uMVMatrixKallisto = MatrixMul(uMVMatrixKallisto,uMVRotYJowiszOs);  
+  uMVMatrixKallisto = MatrixMul(uMVMatrixKallisto,uMVObjectKallisto);
+  uMVMatrixKallisto = MatrixMul(uMVMatrixKallisto,uMVRotX);
+  uMVMatrixKallisto = MatrixMul(uMVMatrixKallisto,uMVRotYJowisz);
+  uMVMatrixKallisto = MatrixMul(uMVMatrixKallisto,uMVRotZ);
+  uMVMatrixKallisto = MatrixMul(uMVMatrixKallisto,uMVTranslateZ);
+  uMVMatrixKallisto = MatrixMul(uMVMatrixKallisto,uMVTranslateX);
+  uMVMatrixKallisto = MatrixMul(uMVMatrixKallisto,uMVTranslateY);
+  
+  uMVMatrixGanimedes = MatrixMul(uMVMatrixGanimedes,uMVscaleGanimedes);
+  uMVMatrixGanimedes = MatrixMul(uMVMatrixGanimedes,uMVRotYJowiszOs);  
+  uMVMatrixGanimedes = MatrixMul(uMVMatrixGanimedes,uMVObjectGanimedes);
+  uMVMatrixGanimedes = MatrixMul(uMVMatrixGanimedes,uMVRotX);
+  uMVMatrixGanimedes = MatrixMul(uMVMatrixGanimedes,uMVRotYJowisz);
+  uMVMatrixGanimedes = MatrixMul(uMVMatrixGanimedes,uMVRotZ);
+  uMVMatrixGanimedes = MatrixMul(uMVMatrixGanimedes,uMVTranslateZ);
+  uMVMatrixGanimedes = MatrixMul(uMVMatrixGanimedes,uMVTranslateX);
+  uMVMatrixGanimedes = MatrixMul(uMVMatrixGanimedes,uMVTranslateY);
+
+  uMVMatrixEuropa = MatrixMul(uMVMatrixEuropa,uMVscaleEuropa);
+ uMVMatrixEuropa = MatrixMul(uMVMatrixEuropa,uMVRotYJowiszOs);  
+  uMVMatrixEuropa = MatrixMul(uMVMatrixEuropa,uMVObjectEuropa);
+  uMVMatrixEuropa = MatrixMul(uMVMatrixEuropa,uMVRotX);
+  uMVMatrixEuropa = MatrixMul(uMVMatrixEuropa,uMVRotYJowisz);
+  uMVMatrixEuropa = MatrixMul(uMVMatrixEuropa,uMVRotZ);
+  uMVMatrixEuropa = MatrixMul(uMVMatrixEuropa,uMVTranslateZ);
+  uMVMatrixEuropa = MatrixMul(uMVMatrixEuropa,uMVTranslateX);
+  uMVMatrixEuropa = MatrixMul(uMVMatrixEuropa,uMVTranslateY);
+  
+  uMVMatrixIo = MatrixMul(uMVMatrixIo,uMVscaleIo);
+  uMVMatrixIo = MatrixMul(uMVMatrixIo,uMVRotYJowiszOs);  
+  uMVMatrixIo = MatrixMul(uMVMatrixIo,uMVObjectIo);
+  uMVMatrixIo = MatrixMul(uMVMatrixIo,uMVRotX);
+  uMVMatrixIo = MatrixMul(uMVMatrixIo,uMVRotYJowisz);
+  uMVMatrixIo = MatrixMul(uMVMatrixIo,uMVRotZ);
+  uMVMatrixIo = MatrixMul(uMVMatrixIo,uMVTranslateZ);
+  uMVMatrixIo = MatrixMul(uMVMatrixIo,uMVTranslateX);
+  uMVMatrixIo = MatrixMul(uMVMatrixIo,uMVTranslateY); 
+
+  uMVMatrixJowisz = MatrixMul(uMVMatrixJowisz,uMVscaleJowisz);
+  uMVMatrixJowisz = MatrixMul(uMVMatrixJowisz,uMVRotYJowiszOs);  
+  uMVMatrixJowisz = MatrixMul(uMVMatrixJowisz,uMVObjectJowisz);
+  uMVMatrixJowisz = MatrixMul(uMVMatrixJowisz,uMVRotX);
+  uMVMatrixJowisz = MatrixMul(uMVMatrixJowisz,uMVRotYJowisz);
+  uMVMatrixJowisz = MatrixMul(uMVMatrixJowisz,uMVRotZ);
+  uMVMatrixJowisz = MatrixMul(uMVMatrixJowisz,uMVTranslateZ);
+  uMVMatrixJowisz = MatrixMul(uMVMatrixJowisz,uMVTranslateX);
+  uMVMatrixJowisz = MatrixMul(uMVMatrixJowisz,uMVTranslateY);
+
+  uMVMatrixTytan = MatrixMul(uMVMatrixTytan,uMVscaleTytan);
+  uMVMatrixTytan = MatrixMul(uMVMatrixTytan,uMVRotYSaturnOs);  
+  uMVMatrixTytan = MatrixMul(uMVMatrixTytan,uMVObjectTytan);
+  uMVMatrixTytan = MatrixMul(uMVMatrixTytan,uMVRotX);
+  uMVMatrixTytan = MatrixMul(uMVMatrixTytan,uMVRotYSaturn);
+  uMVMatrixTytan = MatrixMul(uMVMatrixTytan,uMVRotZ);
+  uMVMatrixTytan = MatrixMul(uMVMatrixTytan,uMVTranslateZ);
+  uMVMatrixTytan = MatrixMul(uMVMatrixTytan,uMVTranslateX);
+  uMVMatrixTytan = MatrixMul(uMVMatrixTytan,uMVTranslateY);   
+  
+  uMVMatrixSaturn = MatrixMul(uMVMatrixSaturn,uMVscaleSaturn);
+  uMVMatrixSaturn = MatrixMul(uMVMatrixSaturn,uMVRotYSaturnOs);  
+  uMVMatrixSaturn = MatrixMul(uMVMatrixSaturn,uMVObjectSaturn);
+  uMVMatrixSaturn = MatrixMul(uMVMatrixSaturn,uMVRotX);
+  uMVMatrixSaturn = MatrixMul(uMVMatrixSaturn,uMVRotYSaturn);
+  uMVMatrixSaturn = MatrixMul(uMVMatrixSaturn,uMVRotZ);
+  uMVMatrixSaturn = MatrixMul(uMVMatrixSaturn,uMVTranslateZ);
+  uMVMatrixSaturn = MatrixMul(uMVMatrixSaturn,uMVTranslateX);
+  uMVMatrixSaturn = MatrixMul(uMVMatrixSaturn,uMVTranslateY); 
+  
+  uMVMatrixOberon = MatrixMul(uMVMatrixOberon,uMVscaleOberon);
+  uMVMatrixOberon = MatrixMul(uMVMatrixOberon,uMVRotYUranOs);  
+  uMVMatrixOberon = MatrixMul(uMVMatrixOberon,uMVObjectOberon);
+  uMVMatrixOberon = MatrixMul(uMVMatrixOberon,uMVRotX);
+  uMVMatrixOberon = MatrixMul(uMVMatrixOberon,uMVRotYUran);
+  uMVMatrixOberon = MatrixMul(uMVMatrixOberon,uMVRotZ);
+  uMVMatrixOberon = MatrixMul(uMVMatrixOberon,uMVTranslateZ);
+  uMVMatrixOberon = MatrixMul(uMVMatrixOberon,uMVTranslateX);
+  uMVMatrixOberon = MatrixMul(uMVMatrixOberon,uMVTranslateY); 
+  
+  uMVMatrixTytania = MatrixMul(uMVMatrixTytania,uMVscaleTytania);
+  uMVMatrixTytania = MatrixMul(uMVMatrixTytania,uMVRotYUran);  
+  uMVMatrixTytania = MatrixMul(uMVMatrixTytania,uMVObjectTytania);
+  uMVMatrixTytania = MatrixMul(uMVMatrixTytania,uMVRotX);
+  uMVMatrixTytania = MatrixMul(uMVMatrixTytania,uMVRotYUran);
+  uMVMatrixTytania = MatrixMul(uMVMatrixTytania,uMVRotZ);
+  uMVMatrixTytania = MatrixMul(uMVMatrixTytania,uMVTranslateZ);
+  uMVMatrixTytania = MatrixMul(uMVMatrixTytania,uMVTranslateX);
+  uMVMatrixTytania = MatrixMul(uMVMatrixTytania,uMVTranslateY); 
+  
+  uMVMatrixUran = MatrixMul(uMVMatrixUran,uMVscaleUran);
+  uMVMatrixUran = MatrixMul(uMVMatrixUran,uMVRotYUranOs);  
+  uMVMatrixUran = MatrixMul(uMVMatrixUran,uMVObjectUran);
+  uMVMatrixUran = MatrixMul(uMVMatrixUran,uMVRotX);
+  uMVMatrixUran = MatrixMul(uMVMatrixUran,uMVRotYUran);
+  uMVMatrixUran = MatrixMul(uMVMatrixUran,uMVRotZ);
+  uMVMatrixUran = MatrixMul(uMVMatrixUran,uMVTranslateZ);
+  uMVMatrixUran = MatrixMul(uMVMatrixUran,uMVTranslateX);
+  uMVMatrixUran = MatrixMul(uMVMatrixUran,uMVTranslateY);
+  
+  uMVMatrixTryton = MatrixMul(uMVMatrixTryton,uMVscaleTryton);
+  uMVMatrixTryton = MatrixMul(uMVMatrixTryton,uMVRotYNeptunOs);  
+  uMVMatrixTryton = MatrixMul(uMVMatrixTryton,uMVObjectTryton);
+  uMVMatrixTryton = MatrixMul(uMVMatrixTryton,uMVRotX);
+  uMVMatrixTryton = MatrixMul(uMVMatrixTryton,uMVRotYNeptun);
+  uMVMatrixTryton = MatrixMul(uMVMatrixTryton,uMVRotZ);
+  uMVMatrixTryton = MatrixMul(uMVMatrixTryton,uMVTranslateZ);
+  uMVMatrixTryton = MatrixMul(uMVMatrixTryton,uMVTranslateX);
+  uMVMatrixTryton = MatrixMul(uMVMatrixTryton,uMVTranslateY);  
+  
+  uMVMatrixNeptun = MatrixMul(uMVMatrixNeptun,uMVscaleNeptun);
+  uMVMatrixNeptun = MatrixMul(uMVMatrixNeptun,uMVRotYNeptunOs);  
+  uMVMatrixNeptun = MatrixMul(uMVMatrixNeptun,uMVObjectNeptun);
+  uMVMatrixNeptun = MatrixMul(uMVMatrixNeptun,uMVRotX);
+  uMVMatrixNeptun = MatrixMul(uMVMatrixNeptun,uMVRotYNeptun);
+  uMVMatrixNeptun = MatrixMul(uMVMatrixNeptun,uMVRotZ);
+  uMVMatrixNeptun = MatrixMul(uMVMatrixNeptun,uMVTranslateZ);
+  uMVMatrixNeptun = MatrixMul(uMVMatrixNeptun,uMVTranslateX);
+  uMVMatrixNeptun = MatrixMul(uMVMatrixNeptun,uMVTranslateY);   
+  //alert(uPMatrix);
+  
+  //Render Scene
+  gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight); 
+  gl.clearColor(0.0,0.0,0.0,1.0); //Wyczyszczenie obrazu kolorem czarnym
+  gl.clearDepth(1.0);             //Wyczyścienie bufora głebi najdalszym planem
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.useProgram(shaderProgram)   //Użycie przygotowanego programu shaderowego
+  
+  gl.enable(gl.DEPTH_TEST);           // Włączenie testu głębi - obiekty bliższe mają przykrywać obiekty dalsze
+  gl.depthFunc(gl.LEQUAL);            // 
+  
+  gl.uniformMatrix4fv(gl.getUniformLocation(shaderProgram, "uPMatrix"), false, new Float32Array(uPMatrix)); //Wgranie macierzy kamery do pamięci karty graficznej
+  gl.uniformMatrix4fv(gl.getUniformLocation(shaderProgram, "uMVMatrix"), false, new Float32Array(uMVMatrixSlonce));
+  
+  gl.enableVertexAttribArray(gl.getAttribLocation(shaderProgram, "aVertexPosition"));  //Przekazanie położenia
+  gl.bindBuffer(gl.ARRAY_BUFFER, vertexPositionBuffer);
+  gl.vertexAttribPointer(gl.getAttribLocation(shaderProgram, "aVertexPosition"), vertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+  
+  gl.enableVertexAttribArray(gl.getAttribLocation(shaderProgram, "aVertexColor"));  //Przekazanie kolorów
+  gl.bindBuffer(gl.ARRAY_BUFFER, vertexColorBuffer);
+  gl.vertexAttribPointer(gl.getAttribLocation(shaderProgram, "aVertexColor"), vertexColorBuffer.itemSize, gl.FLOAT, false, 0, 0);
+  
+  gl.enableVertexAttribArray(gl.getAttribLocation(shaderProgram, "aVertexCoords"));  //Pass the geometry
+  gl.bindBuffer(gl.ARRAY_BUFFER, vertexCoordsBuffer);
+  gl.vertexAttribPointer(gl.getAttribLocation(shaderProgram, "aVertexCoords"), vertexCoordsBuffer.itemSize, gl.FLOAT, false, 0, 0);
+  
+  gl.enableVertexAttribArray(gl.getAttribLocation(shaderProgram, "aVertexNormal"));  //Przekazywanie wektorów normalnych
+  gl.bindBuffer(gl.ARRAY_BUFFER, vertexNormalBuffer);
+  gl.vertexAttribPointer(gl.getAttribLocation(shaderProgram, "aVertexNormal"), vertexNormalBuffer.itemSize, gl.FLOAT, false, 0, 0);
+  
+  //gl.uniformMatrix4fv(gl.getUniformLocation(shaderProgram, "uVMatrix"), false, new Float32Array(uVMatrix)); //Wgranie macierzy widoku do pamięci karty graficznej
+  //l.uniformMatrix4fv(gl.getUniformLocation(shaderProgram, "uMMatrix"), false, new Float32Array(uMMatrix0));
+  //gl.uniformMatrix4fv(gl.getUniformLocation(shaderProgram, "uMMatrix2"), false, new Float32Array(MatrixTransposeInverse(uMMatrix0)));
+  
+  gl.uniform3f(gl.getUniformLocation(shaderProgram, "uLightPosition"),lightX,lightY,lightZ);
+  
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, textureBufferSlonce);
+  gl.uniform1i(gl.getUniformLocation(shaderProgram, "uSampler"), 0);
+  
+  gl.drawArrays(gl.TRIANGLES, 0, vertexPositionBuffer.numItems*vertexPositionBuffer.itemSize); //Faktyczne wywołanie rendrowania
+  
+  //Drugi Obiekt - Merkury
+  gl.uniformMatrix4fv(gl.getUniformLocation(shaderProgram, "uMVMatrix"), false, new Float32Array(uMVMatrixMerkury));
+  gl.bindTexture(gl.TEXTURE_2D, textureBufferMerkury);
+  gl.drawArrays(gl.TRIANGLES, 0, vertexPositionBuffer.numItems*vertexPositionBuffer.itemSize); //Faktyczne wywołanie rendrowania
+  
+  //Trzeci Obiekt - Wenus
+  gl.uniformMatrix4fv(gl.getUniformLocation(shaderProgram, "uMVMatrix"), false, new Float32Array(uMVMatrixWenus));
+  gl.bindTexture(gl.TEXTURE_2D, textureBufferWenus);
+  gl.drawArrays(gl.TRIANGLES, 0, vertexPositionBuffer.numItems*vertexPositionBuffer.itemSize); //Faktyczne wywołanie rendrowania
+   
+  //Czwarty Obiekt - Ksiezyc
+  gl.uniformMatrix4fv(gl.getUniformLocation(shaderProgram, "uMVMatrix"), false, new Float32Array(uMVMatrixKsiezyc));
+  gl.bindTexture(gl.TEXTURE_2D, textureBufferKsiezyc);
+  gl.drawArrays(gl.TRIANGLES, 0, vertexPositionBuffer.numItems*vertexPositionBuffer.itemSize); //Faktyczne wywołanie rendrowania
+  
+  //Piąty Obiekt - Ziemia
+  gl.uniformMatrix4fv(gl.getUniformLocation(shaderProgram, "uMVMatrix"), false, new Float32Array(uMVMatrixZiemia));
+  gl.bindTexture(gl.TEXTURE_2D, textureBufferZiemia);
+  gl.drawArrays(gl.TRIANGLES, 0, vertexPositionBuffer.numItems*vertexPositionBuffer.itemSize); //Faktyczne wywołanie rendrowania
+  
+  //Szósty Obiekt - Deimos
+  gl.uniformMatrix4fv(gl.getUniformLocation(shaderProgram, "uMVMatrix"), false, new Float32Array(uMVMatrixDeimos));
+  gl.bindTexture(gl.TEXTURE_2D, textureBufferDeimos);
+  gl.drawArrays(gl.TRIANGLES, 0, vertexPositionBuffer.numItems*vertexPositionBuffer.itemSize); //Faktyczne wywołanie rendrowania
+     
+  //Siódmy Obiekt - Fobos
+  gl.uniformMatrix4fv(gl.getUniformLocation(shaderProgram, "uMVMatrix"), false, new Float32Array(uMVMatrixFobos));
+  gl.bindTexture(gl.TEXTURE_2D, textureBufferFobos);
+  gl.drawArrays(gl.TRIANGLES, 0, vertexPositionBuffer.numItems*vertexPositionBuffer.itemSize); //Faktyczne wywołanie rendrowania
+
+  //Ósmy Obiekt - Mars
+  gl.uniformMatrix4fv(gl.getUniformLocation(shaderProgram, "uMVMatrix"), false, new Float32Array(uMVMatrixMars));
+  gl.bindTexture(gl.TEXTURE_2D, textureBufferMars);
+  gl.drawArrays(gl.TRIANGLES, 0, vertexPositionBuffer.numItems*vertexPositionBuffer.itemSize); //Faktyczne wywołanie rendrowania
+   
+  //Dziewiąty Obiekt - Kallisto
+  gl.uniformMatrix4fv(gl.getUniformLocation(shaderProgram, "uMVMatrix"), false, new Float32Array(uMVMatrixKallisto));
+  gl.bindTexture(gl.TEXTURE_2D, textureBufferKallisto);
+  gl.drawArrays(gl.TRIANGLES, 0, vertexPositionBuffer.numItems*vertexPositionBuffer.itemSize); //Faktyczne wywołanie rendrowania
+  
+  //Dziesiąty Obiekt - Ganimedes
+  gl.uniformMatrix4fv(gl.getUniformLocation(shaderProgram, "uMVMatrix"), false, new Float32Array(uMVMatrixGanimedes));
+  gl.bindTexture(gl.TEXTURE_2D, textureBufferGanimedes);
+  gl.drawArrays(gl.TRIANGLES, 0, vertexPositionBuffer.numItems*vertexPositionBuffer.itemSize); //Faktyczne wywołanie rendrowania
+   
+  //Jedenasty Obiekt - Europa
+  gl.uniformMatrix4fv(gl.getUniformLocation(shaderProgram, "uMVMatrix"), false, new Float32Array(uMVMatrixEuropa));
+  gl.bindTexture(gl.TEXTURE_2D, textureBufferEuropa);
+  gl.drawArrays(gl.TRIANGLES, 0, vertexPositionBuffer.numItems*vertexPositionBuffer.itemSize); //Faktyczne wywołanie rendrowania
+
+  //Dwunasty Obiekt - Io
+  gl.uniformMatrix4fv(gl.getUniformLocation(shaderProgram, "uMVMatrix"), false, new Float32Array(uMVMatrixIo));
+  gl.bindTexture(gl.TEXTURE_2D, textureBufferIo);
+  gl.drawArrays(gl.TRIANGLES, 0, vertexPositionBuffer.numItems*vertexPositionBuffer.itemSize); //Faktyczne wywołanie rendrowania
+    
+  //Trzynasty Obiekt - Jowisz
+  gl.uniformMatrix4fv(gl.getUniformLocation(shaderProgram, "uMVMatrix"), false, new Float32Array(uMVMatrixJowisz));
+  gl.bindTexture(gl.TEXTURE_2D, textureBufferJowisz);
+  gl.drawArrays(gl.TRIANGLES, 0, vertexPositionBuffer.numItems*vertexPositionBuffer.itemSize); //Faktyczne wywołanie rendrowania
+        
+  //Czternasty Obiekt - Tytan
+  gl.uniformMatrix4fv(gl.getUniformLocation(shaderProgram, "uMVMatrix"), false, new Float32Array(uMVMatrixTytan));
+  gl.bindTexture(gl.TEXTURE_2D, textureBufferTytan);
+  gl.drawArrays(gl.TRIANGLES, 0, vertexPositionBuffer.numItems*vertexPositionBuffer.itemSize); //Faktyczne wywołanie rendrowania
+            
+  //Piętnasty Obiekt - Saturn
+  gl.uniformMatrix4fv(gl.getUniformLocation(shaderProgram, "uMVMatrix"), false, new Float32Array(uMVMatrixSaturn));
+  gl.bindTexture(gl.TEXTURE_2D, textureBufferSaturn);
+  gl.drawArrays(gl.TRIANGLES, 0, vertexPositionBuffer.numItems*vertexPositionBuffer.itemSize); //Faktyczne wywołanie rendrowania
+     
+  //Szesnasty Obiekt - Oberon
+  gl.uniformMatrix4fv(gl.getUniformLocation(shaderProgram, "uMVMatrix"), false, new Float32Array(uMVMatrixOberon));
+  gl.bindTexture(gl.TEXTURE_2D, textureBufferOberon);
+  gl.drawArrays(gl.TRIANGLES, 0, vertexPositionBuffer.numItems*vertexPositionBuffer.itemSize); //Faktyczne wywołanie rendrowania
+     
+  //Siedemnasty Obiekt - Tytania
+  gl.uniformMatrix4fv(gl.getUniformLocation(shaderProgram, "uMVMatrix"), false, new Float32Array(uMVMatrixTytania));
+  gl.bindTexture(gl.TEXTURE_2D, textureBufferTytania);
+  gl.drawArrays(gl.TRIANGLES, 0, vertexPositionBuffer.numItems*vertexPositionBuffer.itemSize); //Faktyczne wywołanie rendrowania
+     
+  //Osiemnasty Obiekt - Uran
+  gl.uniformMatrix4fv(gl.getUniformLocation(shaderProgram, "uMVMatrix"), false, new Float32Array(uMVMatrixUran));
+  gl.bindTexture(gl.TEXTURE_2D, textureBufferUran);
+  gl.drawArrays(gl.TRIANGLES, 0, vertexPositionBuffer.numItems*vertexPositionBuffer.itemSize); //Faktyczne wywołanie rendrowania
+     	 
+  //Dziewiętnasty Obiekt - Tryton
+  gl.uniformMatrix4fv(gl.getUniformLocation(shaderProgram, "uMVMatrix"), false, new Float32Array(uMVMatrixTryton));
+  gl.bindTexture(gl.TEXTURE_2D, textureBufferTryton);
+  gl.drawArrays(gl.TRIANGLES, 0, vertexPositionBuffer.numItems*vertexPositionBuffer.itemSize); //Faktyczne wywołanie rendrowania
+    
+  //Dwudziesty Obiekt - Neptun
+  gl.uniformMatrix4fv(gl.getUniformLocation(shaderProgram, "uMVMatrix"), false, new Float32Array(uMVMatrixNeptun));
+  gl.bindTexture(gl.TEXTURE_2D, textureBufferNeptun);
+  gl.drawArrays(gl.TRIANGLES, 0, vertexPositionBuffer.numItems*vertexPositionBuffer.itemSize); //Faktyczne wywołanie rendrowania
+     	 	 			
+  setTimeout(Tick,100);
+  angleY=angleY+1.0;
+}
+function handlekeydown(e)
+{
+ // Q W E A S D
+ if(e.keyCode==87) angleX=angleX+1.0; //W
+ if(e.keyCode==83) angleX=angleX-1.0; //S
+ if(e.keyCode==68) angleY=angleY+1.0;
+ if(e.keyCode==65) angleY=angleY-1.0;
+ if(e.keyCode==81) angleZ=angleZ+1.0;
+ if(e.keyCode==69) angleZ=angleZ-1.0;
+ //alert(e.keyCode);
+ //alert(angleX);
+ 
+ //U I O J K L
+ /*
+ if(e.keyCode==76) lightX=lightX+0.1;
+ if(e.keyCode==74) lightX=lightX-0.1;
+ if(e.keyCode==73) lightY=lightY+0.1;
+ if(e.keyCode==75) lightY=lightY-0.1;
+ if(e.keyCode==85) lightZ=lightZ+0.1;
+ if(e.keyCode==79) lightZ=lightZ-0.1;*/
+ if(e.keyCode==73) tz=tz+2;  //I przód
+ if(e.keyCode==75) tz=tz-2;  //K tył
+ if(e.keyCode==74) tx=tx+2;  //J lewo
+ if(e.keyCode==76) tx=tx-2;  //L prawo
+ if(e.keyCode==85) ty=ty-2;  //U góra
+ if(e.keyCode==79) ty=ty+2;  //O dół
+}
+</script>
+</head>
+<body onload="startGL()" onkeydown="handlekeydown(event)">
+<canvas id="canvas3D" width="640" height="480" style="border: solid black 1px"></canvas>
+<img id="textureImgSlonce" src="slonce.png">
+<img id="textureImgMerkury" src="merkury.png">
+<img id="textureImgWenus" src="wenus.png">
+<img id="textureImgKsiezyc" src="ksiezyc.png">
+<img id="textureImgZiemia" src="ziemia.jpg">
+<img id="textureImgDeimos" src="deimos.png">
+<img id="textureImgFobos" src="fobos.png">
+<img id="textureImgMars" src="mars.png">
+<img id="textureImgKallisto" src="kallisto.png">
+<img id="textureImgGanimedes" src="ganimedes.png">
+<img id="textureImgEuropa" src="europa.png">
+<img id="textureImgIo" src="io.png">
+<img id="textureImgJowisz" src="jowisz.png">
+<img id="textureImgTytan" src="tytan.png">
+<img id="textureImgSaturn" src="saturn.png">
+<img id="textureImgOberon" src="oberon.png">
+<img id="textureImgTytania" src="tytania.png">
+<img id="textureImgUran" src="uran.png">
+<img id="textureImgTryton" src="tryton.png">
+<img id="textureImgNeptun" src="neptun.png">
+</body>
+</html>
